@@ -1,0 +1,132 @@
+export component AdjustButton inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: touch.pressed ? #5eead4 : #25384c;
+    background: touch.pressed ? #0f766e : #111a28;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: #f8fafc;
+        font-size: 22px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component ActionButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    callback clicked;
+
+    width: 90px;
+    height: 48px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.primary
+        ? (touch.pressed ? #bbf7d0 : #4ade80)
+        : (touch.pressed ? #fcd34d : #334155);
+    background: root.primary
+        ? (touch.pressed ? #15803d : #16a34a)
+        : (touch.pressed ? #78350f : #111a28);
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: root.primary ? #04130a : #f8fafc;
+        font-size: 18px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component FieldAdjuster inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    callback increment;
+    callback decrement;
+
+    width: 64px;
+    height: 140px;
+    border-radius: 8px;
+    background: #0b1320;
+
+    Rectangle {
+        x: 10px;
+        y: 0px;
+        width: parent.width - 20px;
+        height: 2px;
+        background: #0ea5c6;
+    }
+
+    Text {
+        x: 0px;
+        y: 6px;
+        width: parent.width;
+        height: 16px;
+        text: root.label;
+        color: #8aa4b8;
+        font-size: 10px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    AdjustButton {
+        x: (parent.width - self.width) / 2;
+        y: 24px;
+        label: "+";
+        clicked => {
+            root.increment();
+        }
+    }
+
+    Text {
+        x: 0px;
+        y: 68px;
+        width: parent.width;
+        height: 28px;
+        text: root.value;
+        color: #f8fafc;
+        font-size: 25px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    AdjustButton {
+        x: (parent.width - self.width) / 2;
+        y: 94px;
+        label: "-";
+        clicked => {
+            root.decrement();
+        }
+    }
+}

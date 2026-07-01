@@ -1,4 +1,5 @@
-use esp_hal::{Blocking, delay::Delay, i2c::master::I2c};
+use crate::bus::SharedI2cBus;
+use esp_hal::delay::Delay;
 
 pub const BL_EN: u8 = 1 << 1;
 pub const LCD_RST: u8 = 1 << 5;
@@ -8,14 +9,14 @@ const REG_OUTPUT: u8 = 0x01;
 const REG_POLARITY: u8 = 0x02;
 const REG_CONFIG: u8 = 0x03;
 
-pub struct Tca9554<'d> {
-    i2c: I2c<'d, Blocking>,
+pub struct Tca9554 {
+    i2c: SharedI2cBus,
     output: u8,
     config: u8,
 }
 
-impl<'d> Tca9554<'d> {
-    pub fn new(i2c: I2c<'d, Blocking>) -> Self {
+impl Tca9554 {
+    pub fn new(i2c: SharedI2cBus) -> Self {
         Self {
             i2c,
             output: 0xff,
@@ -28,9 +29,15 @@ impl<'d> Tca9554<'d> {
         self.output &= !BL_EN;
         self.output |= LCD_RST;
 
-        self.i2c.write(ADDRESS, &[REG_POLARITY, 0x00])?;
-        self.i2c.write(ADDRESS, &[REG_OUTPUT, self.output])?;
-        self.i2c.write(ADDRESS, &[REG_CONFIG, self.config])
+        self.i2c
+            .borrow_mut()
+            .write(ADDRESS, &[REG_POLARITY, 0x00])?;
+        self.i2c
+            .borrow_mut()
+            .write(ADDRESS, &[REG_OUTPUT, self.output])?;
+        self.i2c
+            .borrow_mut()
+            .write(ADDRESS, &[REG_CONFIG, self.config])
     }
 
     pub fn reset_lcd(&mut self, delay: &mut Delay) -> Result<(), esp_hal::i2c::master::Error> {
@@ -58,6 +65,8 @@ impl<'d> Tca9554<'d> {
     }
 
     fn write_output(&mut self) -> Result<(), esp_hal::i2c::master::Error> {
-        self.i2c.write(ADDRESS, &[REG_OUTPUT, self.output])
+        self.i2c
+            .borrow_mut()
+            .write(ADDRESS, &[REG_OUTPUT, self.output])
     }
 }

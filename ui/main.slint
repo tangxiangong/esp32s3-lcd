@@ -1,16 +1,66 @@
+import { AdjustView } from "adjust-view.slint";
+import { ClockView } from "clock-view.slint";
+
 export component AppWindow inherits Window {
+    in property <bool> adjusting: false;
+    in property <string> time-text: "--:--:--";
+    in property <string> date-text: "----/--/--";
+    in property <string> year-text: "----";
+    in property <string> month-text: "--";
+    in property <string> day-text: "--";
+    in property <string> hour-text: "--";
+    in property <string> minute-text: "--";
+    in property <string> second-text: "--";
+    in property <float> day-progress: 0;
+    in property <float> second-progress: 0;
+    callback adjust-year-down;
+    callback adjust-year-up;
+    callback adjust-month-down;
+    callback adjust-month-up;
+    callback adjust-day-down;
+    callback adjust-day-up;
+    callback adjust-hour-down;
+    callback adjust-hour-up;
+    callback adjust-minute-down;
+    callback adjust-minute-up;
+    callback adjust-second-down;
+    callback adjust-second-up;
+    callback confirm-adjust;
+    callback cancel-adjust;
+
     width: 640px;
     height: 172px;
-    background: #101820;
+    background: #05070b;
 
-    Text {
-        width: parent.width;
-        height: parent.height;
-        text: "Hello World";
-        color: white;
-        font-size: 22px;
-        font-weight: 700;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    ClockView {
+        visible: !root.adjusting;
+        time-text: root.time-text;
+        date-text: root.date-text;
+        day-progress: root.day-progress;
+        second-progress: root.second-progress;
+    }
+
+    AdjustView {
+        visible: root.adjusting;
+        year-text: root.year-text;
+        month-text: root.month-text;
+        day-text: root.day-text;
+        hour-text: root.hour-text;
+        minute-text: root.minute-text;
+        second-text: root.second-text;
+        adjust-year-down => { root.adjust-year-down(); }
+        adjust-year-up => { root.adjust-year-up(); }
+        adjust-month-down => { root.adjust-month-down(); }
+        adjust-month-up => { root.adjust-month-up(); }
+        adjust-day-down => { root.adjust-day-down(); }
+        adjust-day-up => { root.adjust-day-up(); }
+        adjust-hour-down => { root.adjust-hour-down(); }
+        adjust-hour-up => { root.adjust-hour-up(); }
+        adjust-minute-down => { root.adjust-minute-down(); }
+        adjust-minute-up => { root.adjust-minute-up(); }
+        adjust-second-down => { root.adjust-second-down(); }
+        adjust-second-up => { root.adjust-second-up(); }
+        confirm-adjust => { root.confirm-adjust(); }
+        cancel-adjust => { root.cancel-adjust(); }
     }
 }
