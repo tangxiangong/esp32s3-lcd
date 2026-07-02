@@ -1,10 +1,132 @@
-import { AdjustView } from "adjust-view.slint";
-import { ClockView } from "clock-view.slint";
+component StepButton inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+
+    width: 42px;
+    height: 36px;
+    border-radius: 6px;
+    background: touch.pressed ? #2f5f84 : #16243b;
+    border-width: 1px;
+    border-color: touch.pressed ? #8fd3ff : #39506e;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component AdjustField inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <int> field-width: 66;
+    callback increment;
+    callback decrement;
+
+    width: root.field-width * 1px;
+    height: 142px;
+    border-radius: 8px;
+    background: #07111e;
+    border-width: 1px;
+    border-color: #1c314c;
+
+    Text {
+        x: 0px;
+        y: 8px;
+        width: parent.width;
+        height: 16px;
+        text: root.label;
+        color: #88a4bd;
+        font-size: 10px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    StepButton {
+        x: (parent.width - self.width) / 2;
+        y: 28px;
+        label: "+";
+        clicked => {
+            root.increment();
+        }
+    }
+
+    Text {
+        x: 0px;
+        y: 68px;
+        width: parent.width;
+        height: 28px;
+        text: root.value;
+        color: #f8fbff;
+        font-size: 24px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    StepButton {
+        x: (parent.width - self.width) / 2;
+        y: 99px;
+        label: "-";
+        clicked => {
+            root.decrement();
+        }
+    }
+}
+
+component CommandButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    callback clicked;
+
+    width: 92px;
+    height: 52px;
+    border-radius: 8px;
+    background: root.primary
+        ? (touch.pressed ? #1e874d : #2ed37a)
+        : (touch.pressed ? #4a2f16 : #142238);
+    border-width: 1px;
+    border-color: root.primary ? #a5ffc9 : #415674;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: root.primary ? #06140a : #f8fbff;
+        font-size: 17px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
 
 export component AppWindow inherits Window {
     in property <bool> adjusting: false;
     in property <string> time-text: "--:--:--";
     in property <string> date-text: "----/--/--";
+    in property <string> status-text: "--月--日 --:--";
     in property <string> year-text: "----";
     in property <string> month-text: "--";
     in property <string> day-text: "--";
@@ -13,6 +135,8 @@ export component AppWindow inherits Window {
     in property <string> second-text: "--";
     in property <float> day-progress: 0;
     in property <float> second-progress: 0;
+    in property <bool> wifi-connected: false;
+    in property <bool> bluetooth-connected: false;
     callback adjust-year-down;
     callback adjust-year-up;
     callback adjust-month-down;
@@ -30,37 +154,172 @@ export component AppWindow inherits Window {
 
     width: 640px;
     height: 172px;
-    background: #05070b;
+    background: #05070c;
 
-    ClockView {
+    Rectangle {
         visible: !root.adjusting;
-        time-text: root.time-text;
-        date-text: root.date-text;
-        day-progress: root.day-progress;
-        second-progress: root.second-progress;
+        width: parent.width;
+        height: parent.height;
+        background: #05070c;
+
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: @image-url("assets/clock-background.png");
+        }
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: #02051526;
+        }
+
+        Image {
+            visible: root.wifi-connected;
+            x: 462px;
+            y: 9px;
+            width: 21px;
+            height: 15px;
+            source: @image-url("assets/wifi.svg");
+        }
+
+        Image {
+            visible: !root.wifi-connected;
+            x: 462px;
+            y: 9px;
+            width: 21px;
+            height: 15px;
+            source: @image-url("assets/wifi.disconnected.svg");
+        }
+
+        Image {
+            visible: root.bluetooth-connected;
+            x: 496px;
+            y: 7px;
+            width: 15px;
+            height: 18px;
+            source: @image-url("assets/bluetooth.svg");
+        }
+
+        Image {
+            visible: !root.bluetooth-connected;
+            x: 496px;
+            y: 7px;
+            width: 15px;
+            height: 18px;
+            source: @image-url("assets/bluetooth.disconnected.svg");
+        }
+
+        TouchArea {
+            x: 169px;
+            y: 29px;
+            width: 128px;
+            height: 128px;
+        }
     }
 
-    AdjustView {
+    Rectangle {
         visible: root.adjusting;
-        year-text: root.year-text;
-        month-text: root.month-text;
-        day-text: root.day-text;
-        hour-text: root.hour-text;
-        minute-text: root.minute-text;
-        second-text: root.second-text;
-        adjust-year-down => { root.adjust-year-down(); }
-        adjust-year-up => { root.adjust-year-up(); }
-        adjust-month-down => { root.adjust-month-down(); }
-        adjust-month-up => { root.adjust-month-up(); }
-        adjust-day-down => { root.adjust-day-down(); }
-        adjust-day-up => { root.adjust-day-up(); }
-        adjust-hour-down => { root.adjust-hour-down(); }
-        adjust-hour-up => { root.adjust-hour-up(); }
-        adjust-minute-down => { root.adjust-minute-down(); }
-        adjust-minute-up => { root.adjust-minute-up(); }
-        adjust-second-down => { root.adjust-second-down(); }
-        adjust-second-up => { root.adjust-second-up(); }
-        confirm-adjust => { root.confirm-adjust(); }
-        cancel-adjust => { root.cancel-adjust(); }
+        width: parent.width;
+        height: parent.height;
+        background: #050b14;
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 528px;
+            height: parent.height;
+            background: #07111e;
+        }
+
+        Rectangle {
+            x: 528px;
+            y: 0px;
+            width: 112px;
+            height: parent.height;
+            background: #0d1726;
+        }
+
+        AdjustField {
+            x: 12px;
+            y: 15px;
+            field-width: 84;
+            label: "YEAR";
+            value: root.year-text;
+            increment => { root.adjust-year-up(); }
+            decrement => { root.adjust-year-down(); }
+        }
+
+        AdjustField {
+            x: 106px;
+            y: 15px;
+            label: "MON";
+            value: root.month-text;
+            increment => { root.adjust-month-up(); }
+            decrement => { root.adjust-month-down(); }
+        }
+
+        AdjustField {
+            x: 180px;
+            y: 15px;
+            label: "DAY";
+            value: root.day-text;
+            increment => { root.adjust-day-up(); }
+            decrement => { root.adjust-day-down(); }
+        }
+
+        Rectangle {
+            x: 262px;
+            y: 25px;
+            width: 1px;
+            height: 122px;
+            background: #27415f;
+        }
+
+        AdjustField {
+            x: 280px;
+            y: 15px;
+            label: "HOUR";
+            value: root.hour-text;
+            increment => { root.adjust-hour-up(); }
+            decrement => { root.adjust-hour-down(); }
+        }
+
+        AdjustField {
+            x: 354px;
+            y: 15px;
+            label: "MIN";
+            value: root.minute-text;
+            increment => { root.adjust-minute-up(); }
+            decrement => { root.adjust-minute-down(); }
+        }
+
+        AdjustField {
+            x: 428px;
+            y: 15px;
+            label: "SEC";
+            value: root.second-text;
+            increment => { root.adjust-second-up(); }
+            decrement => { root.adjust-second-down(); }
+        }
+
+        CommandButton {
+            x: 538px;
+            y: 32px;
+            label: "OK";
+            primary: true;
+            clicked => {
+                root.confirm-adjust();
+            }
+        }
+
+        CommandButton {
+            x: 538px;
+            y: 91px;
+            label: "CANCEL";
+            clicked => {
+                root.cancel-adjust();
+            }
+        }
     }
 }

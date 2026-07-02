@@ -7,6 +7,7 @@ use crate::{
         platform::EspPlatform,
     },
     rtc::pcf85063::{ClockField, DateTime, Pcf85063},
+    text,
 };
 use alloc::{boxed::Box, format, rc::Rc, vec, vec::Vec};
 use core::cell::RefCell;
@@ -51,6 +52,10 @@ pub fn run(mut board: Board) -> ! {
     let ui = AppWindow::new().expect("Slint UI setup failed");
     let rtc = board.rtc;
     ui.set_adjusting(false);
+    let mut wifi_connected = board.wireless.wifi_connected();
+    let mut bluetooth_connected = board.wireless.bluetooth_connected();
+    ui.set_wifi_connected(wifi_connected);
+    ui.set_bluetooth_connected(bluetooth_connected);
     update_clock_ui(&ui, rtc);
     let state = Rc::new(RefCell::new(UiState {
         mode: UiMode::Display,
@@ -60,6 +65,9 @@ pub fn run(mut board: Board) -> ! {
     ui.show().expect("Slint UI show failed");
 
     let mut frame_buffer: Vec<Rgb565Pixel> = vec![Rgb565Pixel(0); DISPLAY_WIDTH * DISPLAY_HEIGHT];
+    let mut display_background: Vec<Rgb565Pixel> =
+        vec![Rgb565Pixel(0); DISPLAY_WIDTH * DISPLAY_HEIGHT];
+    let mut display_background_ready = false;
     let mut native_chunk: Vec<Rgb565Pixel> = vec![Rgb565Pixel(0); NATIVE_CHUNK_PIXELS];
     let mut byte_chunk: Vec<u8> = vec![0; NATIVE_CHUNK_BYTES];
     let mut line_buffer = [Rgb565Pixel(0); DISPLAY_WIDTH];
@@ -71,6 +79,20 @@ pub fn run(mut board: Board) -> ! {
     let mut last_adjust_touch = Instant::now();
 
     loop {
+        board.wireless.poll();
+        let current_wifi_connected = board.wireless.wifi_connected();
+        let current_bluetooth_connected = board.wireless.bluetooth_connected();
+        if current_wifi_connected != wifi_connected {
+            wifi_connected = current_wifi_connected;
+            ui.set_wifi_connected(wifi_connected);
+            window.request_redraw();
+        }
+        if current_bluetooth_connected != bluetooth_connected {
+            bluetooth_connected = current_bluetooth_connected;
+            ui.set_bluetooth_connected(bluetooth_connected);
+            window.request_redraw();
+        }
+
         slint::platform::update_timers_and_animations();
         if state.borrow().mode == UiMode::Adjust
             && last_adjust_touch.elapsed() >= ADJUST_IDLE_TIMEOUT
@@ -86,6 +108,7 @@ pub fn run(mut board: Board) -> ! {
         {
             update_clock_ui(&ui, rtc);
             last_rtc_read = Instant::now();
+            window.request_redraw();
         }
         if let Ok(Some(point)) = board.touch.read() {
             if point.pressed {
@@ -139,6 +162,28 @@ pub fn run(mut board: Board) -> ! {
                 frame: frame_buffer.as_mut_slice(),
                 line_buffer: &mut line_buffer,
             });
+            if state.borrow().mode == UiMode::Display {
+                if display_background_ready {
+                    text::restore_status_background(
+                        frame_buffer.as_mut_slice(),
+                        display_background.as_slice(),
+                        DISPLAY_WIDTH,
+                        DISPLAY_HEIGHT,
+                    );
+                } else {
+                    display_background.copy_from_slice(frame_buffer.as_slice());
+                    display_background_ready = true;
+                }
+
+                let status_text = ui.get_status_text();
+                text::draw_status_text(
+                    frame_buffer.as_mut_slice(),
+                    DISPLAY_WIDTH,
+                    DISPLAY_HEIGHT,
+                    status_text.as_str(),
+                    Rgb565Pixel(0xffff),
+                );
+            }
         });
 
         if needs_flush {
@@ -273,10 +318,14 @@ fn exit_adjust(ui: &AppWindow, state: &RefCell<UiState>) {
 
 fn update_clock_ui(ui: &AppWindow, rtc: Pcf85063) {
     match rtc.read_datetime() {
-        Ok(datetime) => apply_clock_ui(ui, datetime),
+        Ok(datetime) => {
+            apply_clock_ui(ui, datetime);
+        }
         Err(_) => {
+            let status: SharedString = "--月--日 --:--".into();
             ui.set_time_text("--:--:--".into());
             ui.set_date_text("----/--/--".into());
+            ui.set_status_text(status);
             ui.set_day_progress(0.0);
             ui.set_second_progress(0.0);
         }
@@ -284,8 +333,10 @@ fn update_clock_ui(ui: &AppWindow, rtc: Pcf85063) {
 }
 
 fn apply_clock_ui(ui: &AppWindow, datetime: DateTime) {
+    let status = format_status(datetime);
     ui.set_time_text(format_time(datetime));
     ui.set_date_text(format_date(datetime));
+    ui.set_status_text(status);
     ui.set_year_text(format!("{:04}", datetime.year).into());
     ui.set_month_text(format!("{:02}", datetime.month).into());
     ui.set_day_text(format!("{:02}", datetime.day).into());
@@ -308,6 +359,14 @@ fn format_date(datetime: DateTime) -> SharedString {
     format!(
         "{:04}/{:02}/{:02}",
         datetime.year, datetime.month, datetime.day
+    )
+    .into()
+}
+
+fn format_status(datetime: DateTime) -> SharedString {
+    format!(
+        "{}月{}日 {:02}:{:02}",
+        datetime.month, datetime.day, datetime.hour, datetime.minute
     )
     .into()
 }
