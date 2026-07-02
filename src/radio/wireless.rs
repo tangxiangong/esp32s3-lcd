@@ -95,6 +95,7 @@ pub enum WifiActionError {
 
 impl Wireless {
     pub fn new(wifi: peripherals::WIFI<'static>, bt: peripherals::BT<'static>) -> Self {
+        // Wi-Fi/BLE 任一初始化失败都不阻止系统启动；显示和 RTC 功能应继续可用。
         let wifi = match WifiRadio::new(wifi) {
             Ok(radio) => Some(radio),
             Err(error) => {
@@ -115,6 +116,7 @@ impl Wireless {
     }
 
     pub fn poll(&mut self) {
+        // 当前主循环只需要持续轮询 BLE 事件；Wi-Fi 操作由显式 API 触发。
         if let Some(ble) = &mut self.ble {
             ble.poll();
         }

@@ -17,6 +17,7 @@ const UNIFONT_SOURCE: &str = "ui/assets/unifont_all-17.0.04.hex.gz";
 
 fn main() {
     linker_be_nice();
+    // 先生成外部 flash 资源包，再编译 Slint UI；运行时字体表依赖该资源包。
     let assets_len = generate_display_assets();
     generate_assets_manifest(assets_len);
     slint_build::compile_with_config(
@@ -32,6 +33,7 @@ fn main() {
 }
 
 fn generate_display_assets() -> usize {
+    // 资源包会被 runner 单独烧录到 ASSETS_FLASH_BASE，不会自动嵌入主 ELF。
     let font = generate_unifont_table();
     let package = pack_assets(&[(FONT_ASSET_NAME, font.as_slice())]);
     assert!(
@@ -71,6 +73,7 @@ fn generate_unifont_table() -> Vec<u8> {
             _ => panic!("invalid Unifont bitmap width for U+{codepoint:04X}"),
         };
 
+        // 每个 BMP 字符固定 35 字节：码点、宽度、16 行 x 2 字节位图。
         output.extend_from_slice(&(codepoint as u16).to_be_bytes());
         output.push(width);
 
@@ -95,6 +98,7 @@ fn generate_unifont_table() -> Vec<u8> {
 fn pack_assets(assets: &[(&str, &[u8])]) -> Vec<u8> {
     assert!(assets.len() <= u16::MAX as usize, "too many display assets");
 
+    // 简单的只读资源包格式：header + 固定长度表项 + 连续数据区。
     let table_offset = 20usize;
     let data_offset = table_offset + assets.len() * ASSET_TABLE_ENTRY_SIZE;
     let mut package =
@@ -135,6 +139,7 @@ fn pack_assets(assets: &[(&str, &[u8])]) -> Vec<u8> {
 }
 
 fn generate_assets_manifest(assets_len: usize) {
+    // 固件侧通过 include!(OUT_DIR/assets_manifest.rs) 获取 flash 基地址和包长度。
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
     let output = File::create(out_dir.join("assets_manifest.rs"))
         .expect("failed to create display assets manifest");

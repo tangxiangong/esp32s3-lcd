@@ -9,8 +9,10 @@ use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
 
 pub const DISPLAY_WIDTH: usize = 640;
 pub const DISPLAY_HEIGHT: usize = 172;
+// 面板显存原生方向是 172 x 640；应用和 Slint 统一使用 640 x 172 横屏坐标。
 pub const NATIVE_WIDTH: usize = 172;
 pub const NATIVE_HEIGHT: usize = 640;
+// 分块转换可以降低一次 flush 需要的临时内存，同时保持 DMA 写入效率。
 pub const NATIVE_CHUNK_ROWS: usize = 64;
 pub const NATIVE_CHUNK_PIXELS: usize = NATIVE_WIDTH * NATIVE_CHUNK_ROWS;
 pub const NATIVE_CHUNK_BYTES: usize = NATIVE_CHUNK_PIXELS * 2;
@@ -36,6 +38,8 @@ impl<'d> Axs15231b<'d> {
     }
 
     pub fn init(&mut self, delay: &mut Delay) -> Result<(), spi::Error> {
+        // 初始化序列保持最小化：退出睡眠、设置 RGB565、打开显示。
+        // 如需增加厂商寄存器配置，先核对 AXS15231B 数据手册/示例。
         self.write_command(SLPOUT, &[])?;
         delay.delay_millis(100);
         self.write_command(MADCTL, &[0x00])?;
@@ -78,6 +82,7 @@ impl<'d> Axs15231b<'d> {
                 let native_y = native_y_start + row;
                 let native_row = &mut chunk[row * NATIVE_WIDTH..(row + 1) * NATIVE_WIDTH];
                 (0..NATIVE_WIDTH).for_each(|native_x| {
+                    // 将 Slint 横屏坐标旋转到 LCD 原生竖屏显存坐标。
                     let logical_x = native_y;
                     let logical_y = DISPLAY_HEIGHT - native_x - 1;
                     native_row[native_x] = frame[logical_y * DISPLAY_WIDTH + logical_x];
@@ -127,6 +132,7 @@ impl<'d> Axs15231b<'d> {
         let command = if y == 0 { RAMWR } else { RAMWRC };
         let address = Address::_32Bit(encode_qspi_command(WRITE_COLOR, command), DataMode::Single);
 
+        // AXS15231B 这里使用 0x32 四线写颜色数据，像素仍按 RGB565 大端序发送。
         debug_assert!(pixels.len() <= NATIVE_CHUNK_PIXELS);
         debug_assert!(byte_buffer.len() >= pixels.len() * 2);
         for (index, pixel) in pixels.iter().enumerate() {
@@ -169,6 +175,7 @@ impl LineBufferProvider for DisplayLines<'_> {
         range: Range<usize>,
         render_fn: impl FnOnce(&mut [Self::TargetPixel]),
     ) {
+        // Slint 只渲染本行的脏区；line_buffer 是临时行缓冲，frame 保存完整帧。
         render_fn(&mut self.line_buffer[range.clone()]);
 
         let frame_line = &mut self.frame[line * DISPLAY_WIDTH..(line + 1) * DISPLAY_WIDTH];

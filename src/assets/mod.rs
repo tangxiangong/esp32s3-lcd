@@ -51,6 +51,8 @@ fn find(name: &str) -> Result<AssetInfo, Error> {
         .checked_add(table_len as u32)
         .ok_or(Error::InvalidPackage)?;
 
+    // 资源包来自 build.rs 生成并由 cargo run 烧到 0x800000；这里仍做边界检查，
+    // 防止错误烧录或布局变化导致越界读 flash。
     if header.table_offset as usize != package::HEADER_SIZE
         || table_end > header.data_offset
         || header.data_offset as usize > ASSETS_PACKAGE_LEN
@@ -101,6 +103,7 @@ fn read_package(offset: u32, buffer: &mut [u8]) -> Result<(), Error> {
         return Err(Error::OutOfBounds);
     }
 
+    // offset 是资源包内偏移，实际 flash 地址要叠加构建脚本生成的基地址。
     flash::read(
         ASSETS_FLASH_BASE
             .checked_add(offset)

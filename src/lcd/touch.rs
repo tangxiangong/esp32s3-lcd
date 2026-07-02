@@ -36,6 +36,8 @@ impl Touch {
         let pressed = buffer[1] > 0 && buffer[1] < 5;
         if !pressed {
             if self.pressed {
+                // 控制器松手后不再提供坐标，返回最后一次坐标让上层能发送
+                // Slint PointerReleased 事件。
                 self.pressed = false;
                 return Ok(Some(TouchPoint {
                     x: self.last_x,
@@ -50,6 +52,7 @@ impl Touch {
         self.pressed = true;
         let raw_x = (((buffer[2] as u16) & 0x0f) << 8) | buffer[3] as u16;
         let raw_y = (((buffer[4] as u16) & 0x0f) << 8) | buffer[5] as u16;
+        // 原始触摸坐标方向与应用横屏坐标相反，这里转换成 640 x 172 逻辑坐标。
         let x = 639u16.saturating_sub(raw_x.min(639));
         let y = 171u16.saturating_sub(raw_y.min(171));
         self.last_x = x;

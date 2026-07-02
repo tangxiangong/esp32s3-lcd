@@ -34,11 +34,14 @@ struct UiState {
 }
 
 pub fn run(mut board: Board) -> ! {
+    // 应用层接管 Board 后进入永久轮询循环；这里不再返回 main。
     board
         .display
         .clear(Rgb565Pixel(0x1010))
         .expect("LCD clear failed");
 
+    // Slint 在本项目中只提供软件渲染窗口；真正的事件循环由下面的固件
+    // loop 手动驱动。
     let window = slint::platform::software_renderer::MinimalSoftwareWindow::new(
         slint::platform::software_renderer::RepaintBufferType::ReusedBuffer,
     );
@@ -64,6 +67,8 @@ pub fn run(mut board: Board) -> ! {
     connect_adjust_callbacks(&ui, rtc, Rc::clone(&state));
     ui.show().expect("Slint UI show failed");
 
+    // frame_buffer 是 Slint 的逻辑横屏画布；native_chunk/byte_chunk 是写入
+    // AXS15231B 原生竖屏内存顺序前的转换缓冲。
     let mut frame_buffer: Vec<Rgb565Pixel> = vec![Rgb565Pixel(0); DISPLAY_WIDTH * DISPLAY_HEIGHT];
     let mut display_background: Vec<Rgb565Pixel> =
         vec![Rgb565Pixel(0); DISPLAY_WIDTH * DISPLAY_HEIGHT];
@@ -79,6 +84,8 @@ pub fn run(mut board: Board) -> ! {
     let mut last_adjust_touch = Instant::now();
 
     loop {
+        // 主循环不能长时间阻塞：BLE 轮询、触摸响应、RTC 更新时间和刷屏都
+        // 依赖这里持续运行。
         board.wireless.poll();
         let current_wifi_connected = board.wireless.wifi_connected();
         let current_bluetooth_connected = board.wireless.bluetooth_connected();
@@ -94,6 +101,7 @@ pub fn run(mut board: Board) -> ! {
         }
 
         slint::platform::update_timers_and_animations();
+        // 调时界面没有独立任务，空闲超时在帧循环中检查。
         if state.borrow().mode == UiMode::Adjust
             && last_adjust_touch.elapsed() >= ADJUST_IDLE_TIMEOUT
         {
@@ -110,6 +118,8 @@ pub fn run(mut board: Board) -> ! {
             last_rtc_read = Instant::now();
             window.request_redraw();
         }
+        // 触摸在显示模式下只识别长按进入调时；进入调时后才把触摸点转成
+        // Slint pointer 事件，避免普通显示页误触按钮。
         if let Ok(Some(point)) = board.touch.read() {
             if point.pressed {
                 let mode = state.borrow().mode;
@@ -163,6 +173,8 @@ pub fn run(mut board: Board) -> ! {
                 line_buffer: &mut line_buffer,
             });
             if state.borrow().mode == UiMode::Display {
+                // 状态栏文本使用固件侧位图字体叠加。先恢复 Slint 渲染出的
+                // 背景，避免每秒更新时间时旧字残留。
                 if display_background_ready {
                     text::restore_status_background(
                         frame_buffer.as_mut_slice(),
@@ -187,6 +199,8 @@ pub fn run(mut board: Board) -> ! {
         });
 
         if needs_flush {
+            // LCD 驱动负责把横屏逻辑帧转换为面板原生方向，不在应用层做
+            // QSPI 命令或坐标细节。
             board
                 .display
                 .flush_landscape_frame(
@@ -197,6 +211,8 @@ pub fn run(mut board: Board) -> ! {
                 .expect("LCD frame flush failed");
         }
 
+        // 简单限帧，避免空转过快；这里是忙等，后续若加入耗时任务要重新
+        // 评估触摸和 BLE 的轮询延迟。
         while last_frame.elapsed() < Duration::from_millis(16) {}
         last_frame = Instant::now();
     }
