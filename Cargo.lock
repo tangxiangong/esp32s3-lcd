@@ -1887,6 +1887,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-storage"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cf2b3f00c9f94b27c62a4f5296b19470c3a083c687c8146e554a459f9bee596"
+dependencies = [
+ "defmt 1.1.0",
+ "document-features",
+ "embedded-storage",
+ "esp-hal",
+ "esp-hal-procmacros",
+ "esp-metadata-generated",
+ "esp-rom-sys",
+ "esp-sync",
+]
+
+[[package]]
 name = "esp-sync"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2077,12 +2093,15 @@ dependencies = [
  "critical-section",
  "defmt 1.1.0",
  "embedded-io 0.7.1",
+ "embedded-storage",
  "embedded-test",
  "esp-alloc",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-radio",
  "esp-rtos",
+ "esp-storage",
+ "flate2",
  "panic-rtt-target",
  "rtt-target",
  "slint",

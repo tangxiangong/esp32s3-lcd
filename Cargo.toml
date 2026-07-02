@@ -26,6 +26,7 @@ bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "a5
 ] }
 critical-section = "1.2"
 embedded-io = { version = "0.7", features = ["defmt"] }
+embedded-storage = "0.3"
 esp-alloc = { version = "0.10", features = ["defmt"] }
 esp-radio = { version = "0.18", features = [
   "ble",
@@ -36,6 +37,7 @@ esp-radio = { version = "0.18", features = [
   "unstable",
   "wifi",
 ] }
+esp-storage = { version = "0.9", features = ["defmt", "esp32s3"] }
 panic-rtt-target = { version = "0.2", features = ["defmt"] }
 rtt-target = { version = "0.6", features = ["defmt"] }
 slint = { version = "1.17", default-features = false, features = [
@@ -59,6 +61,7 @@ smoltcp = { version = "0.13", default-features = false, features = [
 ] }
 
 [build-dependencies]
+flate2 = "1.1"
 slint-build = "1.17"
 
 [dev-dependencies]
@@ -69,6 +72,9 @@ embedded-test = { version = "0.7", features = ["defmt", "xtensa-semihosting"] }
 # The default debug profile is too slow and too big for resource-constrained devices.
 # Always build with some optimizations enabled.
 opt-level = "s"
+
+[profile.dev.package.esp-storage]
+opt-level = 3
 
 [profile.release]
 codegen-units = 1 # LLVM can perform better optimizations using a single thread

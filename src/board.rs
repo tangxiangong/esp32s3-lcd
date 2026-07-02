@@ -1,9 +1,11 @@
 use crate::{
+    assets,
     lcd::{
         axs15231b::Axs15231b,
         tca9554::{LCD_RST, Tca9554},
         touch::Touch,
     },
+    radio::Wireless,
     rtc::pcf85063::Pcf85063,
 };
 use alloc::boxed::Box;
@@ -13,18 +15,21 @@ use esp_hal::{
     dma::{DmaRxBuf, DmaTxBuf},
     gpio::{Level, Output, OutputConfig},
     i2c::master::{Config as I2cConfig, I2c},
+    interrupt::software::SoftwareInterruptControl,
     peripherals::Peripherals,
     spi::{
         Mode,
         master::{Config as SpiConfig, Spi},
     },
     time::Rate,
+    timer::timg::TimerGroup,
 };
 
 pub struct Board {
     pub display: Axs15231b<'static>,
     pub rtc: Pcf85063,
     pub touch: Touch,
+    pub wireless: Wireless,
     _backlight_pwm: Output<'static>,
 }
 
@@ -33,6 +38,11 @@ impl Board {
         esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 64 * 1024);
         esp_alloc::heap_allocator!(size: 64 * 1024);
         esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram);
+        assets::init(peripherals.FLASH);
+
+        let timg0 = TimerGroup::new(peripherals.TIMG0);
+        let software_interrupt = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+        esp_rtos::start(timg0.timer0, software_interrupt.software_interrupt0);
 
         let i2c = I2c::new(
             peripherals.I2C0,
@@ -89,10 +99,13 @@ impl Board {
         expander.set_high(LCD_RST).expect("LCD reset level failed");
         expander.enable_backlight().expect("LCD backlight failed");
 
+        let wireless = Wireless::new(peripherals.WIFI, peripherals.BT);
+
         Self {
             display,
             rtc,
             touch,
+            wireless,
             _backlight_pwm: backlight_pwm,
         }
     }
