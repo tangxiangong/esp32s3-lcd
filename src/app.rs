@@ -259,6 +259,17 @@ pub fn run(mut board: Board) -> ! {
                     status_text.as_str(),
                     Rgb565Pixel(0xffff),
                 );
+                draw_centered_text(
+                    frame_buffer.as_mut_slice(),
+                    440,
+                    94,
+                    116,
+                    "设置",
+                    Rgb565Pixel(0xffff),
+                );
+            } else {
+                let mode = state.borrow().mode;
+                draw_ui_text_overlays(&ui, mode, frame_buffer.as_mut_slice());
             }
         });
 
@@ -352,6 +363,17 @@ pub fn run(mut board: Board) -> ! {
                             status_text.as_str(),
                             Rgb565Pixel(0xffff),
                         );
+                        draw_centered_text(
+                            frame_buffer.as_mut_slice(),
+                            440,
+                            94,
+                            116,
+                            "设置",
+                            Rgb565Pixel(0xffff),
+                        );
+                    } else {
+                        let mode = state.borrow().mode;
+                        draw_ui_text_overlays(&ui, mode, frame_buffer.as_mut_slice());
                     }
                 });
 
@@ -373,6 +395,213 @@ pub fn run(mut board: Board) -> ! {
         while last_frame.elapsed() < Duration::from_millis(16) {}
         last_frame = Instant::now();
     }
+}
+
+fn draw_ui_text_overlays(ui: &AppWindow, mode: UiMode, frame: &mut [Rgb565Pixel]) {
+    match mode {
+        UiMode::Display => {}
+        UiMode::Settings => draw_settings_text(frame),
+        UiMode::Wifi => draw_wifi_text(ui, frame),
+        UiMode::WifiAdvanced => draw_wifi_advanced_text(ui, frame),
+        UiMode::Bluetooth => draw_bluetooth_text(ui, frame),
+        UiMode::Adjust => draw_time_text(ui, frame),
+        UiMode::About => draw_about_text(ui, frame),
+    }
+}
+
+fn draw_settings_text(frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    draw_centered_text(frame, 18, 32, 86, "返回", white);
+    draw_centered_text(frame, 126, 96, 108, "WiFi", white);
+    draw_centered_text(frame, 250, 96, 108, "蓝牙", white);
+    draw_centered_text(frame, 374, 96, 108, "时间", white);
+    draw_centered_text(frame, 498, 96, 108, "关于", white);
+}
+
+fn draw_wifi_text(ui: &AppWindow, frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    let muted = Rgb565Pixel(0x9d17);
+    let warning = if ui.get_wifi_connected() {
+        Rgb565Pixel(0x8ff7)
+    } else {
+        Rgb565Pixel(0xfe51)
+    };
+
+    draw_centered_text(frame, 10, 24, 72, "返回", white);
+    draw_text_at(frame, 96, 24, "WiFi", white);
+    draw_centered_text(
+        frame,
+        184,
+        24,
+        86,
+        if ui.get_wifi_enabled() {
+            "关闭"
+        } else {
+            "打开"
+        },
+        white,
+    );
+    draw_centered_text(frame, 282, 24, 86, "扫描", white);
+    draw_centered_text(frame, 380, 24, 86, "连接", white);
+    draw_centered_text(frame, 478, 24, 86, "断开", white);
+    draw_centered_text(frame, 574, 24, 56, "高级", white);
+
+    draw_wifi_row_text(
+        frame,
+        30,
+        64,
+        344,
+        ui.get_wifi_row0_title().as_str(),
+        ui.get_wifi_row0_detail().as_str(),
+        ui.get_wifi_row0_selected(),
+    );
+    draw_wifi_row_text(
+        frame,
+        30,
+        112,
+        344,
+        ui.get_wifi_row1_title().as_str(),
+        ui.get_wifi_row1_detail().as_str(),
+        ui.get_wifi_row1_selected(),
+    );
+    draw_wifi_row_text(
+        frame,
+        416,
+        64,
+        186,
+        ui.get_wifi_row2_title().as_str(),
+        ui.get_wifi_row2_detail().as_str(),
+        ui.get_wifi_row2_selected(),
+    );
+
+    draw_text_at(frame, 402, 117, ui.get_wifi_status().as_str(), warning);
+    draw_text_at(
+        frame,
+        402,
+        139,
+        ui.get_wifi_network_detail().as_str(),
+        muted,
+    );
+}
+
+fn draw_wifi_row_text(
+    frame: &mut [Rgb565Pixel],
+    x: usize,
+    y: usize,
+    width: usize,
+    title: &str,
+    detail: &str,
+    selected: bool,
+) {
+    if title.is_empty() {
+        return;
+    }
+
+    let title_color = Rgb565Pixel(0xffff);
+    let detail_color = if selected {
+        Rgb565Pixel(0xbf7f)
+    } else {
+        Rgb565Pixel(0x8d37)
+    };
+    draw_clipped_text(frame, x, y, width, title, title_color);
+    draw_clipped_text(frame, x, y + 19, width, detail, detail_color);
+}
+
+fn draw_wifi_advanced_text(ui: &AppWindow, frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    let muted = Rgb565Pixel(0x8d37);
+    let accent = Rgb565Pixel(0xbf7f);
+
+    draw_centered_text(frame, 10, 24, 72, "返回", white);
+    draw_centered_text(frame, 94, 24, 82, "SSID", white);
+    draw_centered_text(frame, 188, 24, 82, "密码", white);
+    draw_centered_text(frame, 282, 24, 82, "清空", white);
+    draw_centered_text(frame, 376, 24, 82, "连接", white);
+    draw_text_at(frame, 472, 20, "WiFi 高级", white);
+
+    let ssid = format!("SSID {}", ui.get_wifi_manual_ssid());
+    let password = format!("密码 {}", ui.get_wifi_password());
+    let edit = format!("{} {}", ui.get_wifi_edit_label(), ui.get_wifi_key_page());
+    draw_clipped_text(frame, 16, 56, 260, &ssid, accent);
+    draw_clipped_text(frame, 16, 80, 260, &password, accent);
+    draw_clipped_text(frame, 16, 104, 260, &edit, muted);
+    draw_centered_text(frame, 526, 68, 44, "删", white);
+    draw_centered_text(frame, 526, 118, 44, "换", white);
+}
+
+fn draw_bluetooth_text(ui: &AppWindow, frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    draw_centered_text(frame, 18, 32, 84, "返回", white);
+    draw_centered_text(frame, 126, 32, 112, "重新广播", white);
+    draw_text_at(frame, 266, 32, "蓝牙", white);
+    draw_clipped_text(
+        frame,
+        266,
+        77,
+        300,
+        ui.get_bluetooth_status().as_str(),
+        white,
+    );
+}
+
+fn draw_time_text(ui: &AppWindow, frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    let muted = Rgb565Pixel(0x9d17);
+    draw_centered_text(frame, 8, 28, 76, "年", muted);
+    draw_centered_text(frame, 92, 28, 66, "月", muted);
+    draw_centered_text(frame, 166, 28, 66, "日", muted);
+    draw_centered_text(frame, 254, 28, 66, "时", muted);
+    draw_centered_text(frame, 328, 28, 66, "分", muted);
+    draw_centered_text(frame, 402, 28, 66, "秒", muted);
+    draw_centered_text(frame, 488, 53, 94, "保存", white);
+    draw_centered_text(frame, 488, 105, 94, "取消", white);
+    draw_clipped_text(frame, 486, 134, 120, ui.get_time_status().as_str(), muted);
+}
+
+fn draw_about_text(ui: &AppWindow, frame: &mut [Rgb565Pixel]) {
+    let white = Rgb565Pixel(0xffff);
+    draw_centered_text(frame, 18, 32, 84, "返回", white);
+    draw_text_at(frame, 126, 34, "关于", white);
+    draw_text_at(frame, 126, 70, ui.get_about_detail().as_str(), white);
+}
+
+fn draw_centered_text(
+    frame: &mut [Rgb565Pixel],
+    x: usize,
+    y: usize,
+    width: usize,
+    text: &str,
+    color: Rgb565Pixel,
+) {
+    let text_width = text::text_width(text);
+    let text_x = x + width.saturating_sub(text_width) / 2;
+    draw_text_at(frame, text_x, y, text, color);
+}
+
+fn draw_clipped_text(
+    frame: &mut [Rgb565Pixel],
+    x: usize,
+    y: usize,
+    max_width: usize,
+    value: &str,
+    color: Rgb565Pixel,
+) {
+    let mut output = String::new();
+    let mut width = 0;
+    for ch in value.chars() {
+        let mut buffer = [0; 4];
+        let char_width = text::text_width(ch.encode_utf8(&mut buffer));
+        if width + char_width > max_width {
+            break;
+        }
+        output.push(ch);
+        width += char_width;
+    }
+    draw_text_at(frame, x, y, &output, color);
+}
+
+fn draw_text_at(frame: &mut [Rgb565Pixel], x: usize, y: usize, value: &str, color: Rgb565Pixel) {
+    text::draw_text(frame, DISPLAY_WIDTH, DISPLAY_HEIGHT, x, y, value, color);
 }
 
 fn connect_adjust_callbacks(ui: &AppWindow, rtc: Pcf85063, state: Rc<RefCell<UiState>>) {

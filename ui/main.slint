@@ -5,9 +5,9 @@ component RoundIconButton inherits Rectangle {
     in property <bool> primary: false;
     callback clicked;
 
-    width: 132px;
-    height: 132px;
-    border-radius: 66px;
+    width: 108px;
+    height: 108px;
+    border-radius: 54px;
     background: touch.pressed
         ? (root.primary ? #256d93 : #20314a)
         : (root.primary ? #0f5f87 : #101a2d);
@@ -16,7 +16,7 @@ component RoundIconButton inherits Rectangle {
 
     Image {
         x: (parent.width - 36px) / 2;
-        y: 22px;
+        y: 20px;
         width: 36px;
         height: 36px;
         source: root.icon;
@@ -24,7 +24,7 @@ component RoundIconButton inherits Rectangle {
 
     Text {
         x: 10px;
-        y: 66px;
+        y: 62px;
         width: parent.width - 20px;
         height: 26px;
         text: root.title;
@@ -37,7 +37,7 @@ component RoundIconButton inherits Rectangle {
 
     Text {
         x: 12px;
-        y: 94px;
+        y: 88px;
         width: parent.width - 24px;
         height: 18px;
         text: root.subtitle;
@@ -455,12 +455,12 @@ export component AppWindow inherits Window {
             y: 18px;
             width: 496px;
             height: 142px;
-            viewport-width: 640px;
+            viewport-width: 496px;
             viewport-height: 142px;
 
             RoundIconButton {
                 x: 0px;
-                y: 4px;
+                y: 16px;
                 icon: @image-url("assets/wifi.svg");
                 title: "WiFi";
                 subtitle: "";
@@ -469,8 +469,8 @@ export component AppWindow inherits Window {
             }
 
             RoundIconButton {
-                x: 156px;
-                y: 4px;
+                x: 124px;
+                y: 16px;
                 icon: @image-url("assets/bluetooth.svg");
                 title: "蓝牙";
                 subtitle: "";
@@ -479,8 +479,8 @@ export component AppWindow inherits Window {
             }
 
             RoundIconButton {
-                x: 312px;
-                y: 4px;
+                x: 248px;
+                y: 16px;
                 icon: @image-url("assets/clock.svg");
                 title: "时间";
                 subtitle: "";
@@ -489,8 +489,8 @@ export component AppWindow inherits Window {
             }
 
             RoundIconButton {
-                x: 468px;
-                y: 4px;
+                x: 372px;
+                y: 16px;
                 icon: @image-url("assets/info.svg");
                 title: "关于";
                 subtitle: "";
