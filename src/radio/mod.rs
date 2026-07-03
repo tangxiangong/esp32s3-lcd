@@ -1,3 +1,3 @@
 mod wireless;
 
-pub use wireless::Wireless;
+pub use wireless::{BleActionError, WifiActionError, WifiAuthMethod, WifiStatus, Wireless};

@@ -13,7 +13,11 @@ use bleps::{
     ad_structure::{
         AdStructure, BR_EDR_NOT_SUPPORTED, LE_GENERAL_DISCOVERABLE, create_advertising_data,
     },
+    att::Uuid,
+    attribute::{ATT_READABLE, ATT_WRITEABLE, Attribute},
+    attribute_server::{CHARACTERISTIC_UUID16, PRIMARY_SERVICE_UUID16, WorkResult},
     event::EventType,
+    no_rng::NoRng,
 };
 use defmt::{error, info, warn};
 use esp_hal::{
@@ -29,6 +33,16 @@ use esp_radio::{
 };
 
 const BLE_DEVICE_NAME: &str = "ESP32S3 LCD";
+const BLE_SERVICE_UUID: [u8; 16] = [
+    0xe7, 0x3d, 0x9a, 0x10, 0x31, 0x84, 0x46, 0x5f, 0x99, 0x64, 0x87, 0x29, 0x35, 0x6f, 0x2d, 0x21,
+];
+const BLE_WRITE_UUID: [u8; 16] = [
+    0xe7, 0x3d, 0x9a, 0x11, 0x31, 0x84, 0x46, 0x5f, 0x99, 0x64, 0x87, 0x29, 0x35, 0x6f, 0x2d, 0x21,
+];
+const BLE_READ_UUID: [u8; 16] = [
+    0xe7, 0x3d, 0x9a, 0x12, 0x31, 0x84, 0x46, 0x5f, 0x99, 0x64, 0x87, 0x29, 0x35, 0x6f, 0x2d, 0x21,
+];
+const BLE_READ_VALUE: &[u8] = b"ESP32S3 LCD peripheral ready";
 const WIFI_SCAN_LIMIT: usize = 20;
 
 pub struct Wireless {
@@ -46,6 +60,8 @@ struct WifiRadio {
 struct BleRadio {
     ble: Ble<'static>,
     connected: bool,
+    received_data: [u8; 64],
+    received_len: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -123,10 +139,24 @@ impl Wireless {
     }
 
     pub fn scan_networks(&mut self) -> Result<&[WifiNetwork], WifiActionError> {
-        self.wifi
-            .as_mut()
-            .ok_or(WifiActionError::NotInitialized)?
-            .scan_networks()
+        self.scan_networks_cooperative(|| {})
+    }
+
+    pub fn scan_networks_cooperative<F>(
+        &mut self,
+        mut on_wait: F,
+    ) -> Result<&[WifiNetwork], WifiActionError>
+    where
+        F: FnMut(),
+    {
+        let Self { wifi, ble } = self;
+        let wifi = wifi.as_mut().ok_or(WifiActionError::NotInitialized)?;
+        wifi.scan_networks(|| {
+            if let Some(ble) = ble {
+                ble.poll();
+            }
+            on_wait();
+        })
     }
 
     pub fn latest_scan(&self) -> &[WifiNetwork] {
@@ -141,10 +171,26 @@ impl Wireless {
         ssid: &str,
         password: &str,
     ) -> Result<WifiStatus, WifiActionError> {
-        self.wifi
-            .as_mut()
-            .ok_or(WifiActionError::NotInitialized)?
-            .connect_station(ssid, password)
+        self.connect_station_cooperative(ssid, password, || {})
+    }
+
+    pub fn connect_station_cooperative<F>(
+        &mut self,
+        ssid: &str,
+        password: &str,
+        mut on_wait: F,
+    ) -> Result<WifiStatus, WifiActionError>
+    where
+        F: FnMut(),
+    {
+        let Self { wifi, ble } = self;
+        let wifi = wifi.as_mut().ok_or(WifiActionError::NotInitialized)?;
+        wifi.connect_station(ssid, password, || {
+            if let Some(ble) = ble {
+                ble.poll();
+            }
+            on_wait();
+        })
     }
 
     pub fn disconnect_station(&mut self) -> Result<WifiStatus, WifiActionError> {
@@ -170,6 +216,20 @@ impl Wireless {
 
     pub fn bluetooth_connected(&self) -> bool {
         self.ble.as_ref().map(BleRadio::connected).unwrap_or(false)
+    }
+
+    pub fn bluetooth_last_write_len(&self) -> Option<usize> {
+        self.ble.as_ref().map(|ble| ble.last_write().len())
+    }
+
+    pub fn restart_bluetooth_advertising(&mut self) -> Result<(), BleActionError> {
+        let ble = self.ble.as_mut().ok_or(BleActionError::NotInitialized)?;
+        if ble.connected() {
+            return Err(BleActionError::Connected);
+        }
+
+        ble.enable_advertising()
+            .map_err(|_| BleActionError::Advertise)
     }
 }
 
@@ -207,10 +267,13 @@ impl WifiRadio {
         })
     }
 
-    fn scan_networks(&mut self) -> Result<&[WifiNetwork], WifiActionError> {
+    fn scan_networks<F>(&mut self, on_wait: F) -> Result<&[WifiNetwork], WifiActionError>
+    where
+        F: FnMut(),
+    {
         let config = ScanConfig::default().with_max(WIFI_SCAN_LIMIT);
-        let access_points =
-            block_on(self.controller.scan_async(&config)).map_err(|_| WifiActionError::Scan)?;
+        let access_points = block_on_with_yield(self.controller.scan_async(&config), on_wait)
+            .map_err(|_| WifiActionError::Scan)?;
 
         self.scan_results.clear();
         self.scan_results
@@ -227,6 +290,7 @@ impl WifiRadio {
         &mut self,
         ssid: &str,
         password: &str,
+        on_wait: impl FnMut(),
     ) -> Result<WifiStatus, WifiActionError> {
         if ssid.is_empty() || ssid.len() > 32 || password.len() > 64 {
             return Err(WifiActionError::InvalidInput);
@@ -242,7 +306,8 @@ impl WifiRadio {
         self.controller
             .set_config(&Config::Station(station))
             .map_err(|_| WifiActionError::Configure)?;
-        block_on(self.controller.connect_async()).map_err(|_| WifiActionError::Connect)?;
+        block_on_with_yield(self.controller.connect_async(), on_wait)
+            .map_err(|_| WifiActionError::Connect)?;
 
         Ok(self.status())
     }
@@ -335,6 +400,7 @@ impl BleRadio {
             address[5], address[4], address[3], address[2], address[1], address[0]
         );
 
+        // BLE 只作为从机/外设使用：广播本机名称并等待中心设备连接。
         let advertising_data = create_advertising_data(&[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
             AdStructure::CompleteLocalName(BLE_DEVICE_NAME),
@@ -348,6 +414,8 @@ impl BleRadio {
         let mut radio = Self {
             ble,
             connected: false,
+            received_data: [0; 64],
+            received_len: 0,
         };
         radio.enable_advertising()?;
         info!("ble advertising as {}", BLE_DEVICE_NAME);
@@ -356,6 +424,11 @@ impl BleRadio {
     }
 
     fn poll(&mut self) {
+        if self.connected {
+            self.poll_gatt();
+            return;
+        }
+
         if let Some(event) = self.ble.poll() {
             match event {
                 PollResult::Event(EventType::ConnectionComplete { status, .. }) => {
@@ -376,8 +449,71 @@ impl BleRadio {
                     }
                 }
                 PollResult::Event(_) => warn!("ble controller event"),
-                PollResult::AsyncData(_) => warn!("ble async data"),
+                PollResult::AsyncData(_) => warn!("ble async data before connection"),
             }
+        }
+    }
+
+    fn poll_gatt(&mut self) {
+        let mut service_uuid = &BLE_SERVICE_UUID[..];
+        let write_char_decl = characteristic_declaration(ATT_WRITEABLE, 3, BLE_WRITE_UUID);
+        let read_char_decl = characteristic_declaration(ATT_READABLE, 5, BLE_READ_UUID);
+        let mut write_char_decl = &write_char_decl[..];
+        let mut read_char_decl = &read_char_decl[..];
+        let mut read_value = BLE_READ_VALUE;
+        let received_data = self.received_data.as_mut_ptr();
+        let received_len = &mut self.received_len as *mut usize;
+        let write_handler = move |offset: usize, data: &[u8]| {
+            if offset >= 64 {
+                return;
+            }
+
+            let len = data.len().min(64 - offset);
+            // bleps 要求 GATT 表在 AttributeServer 生命周期内看起来是
+            // 'static；这里的写回指针只在本次 poll 期间使用。
+            unsafe {
+                core::ptr::copy_nonoverlapping(data.as_ptr(), received_data.add(offset), len);
+                *received_len = offset + len;
+            }
+            info!("ble write offset {} len {}", offset, len);
+        };
+        let notify_handler = |_enabled: bool| {};
+        let mut write_value = ((), write_handler, notify_handler);
+
+        let mut attributes = [
+            Attribute::new(PRIMARY_SERVICE_UUID16, &mut service_uuid),
+            Attribute::new(CHARACTERISTIC_UUID16, &mut write_char_decl),
+            Attribute::new(Uuid::Uuid128(BLE_WRITE_UUID), &mut write_value),
+            Attribute::new(CHARACTERISTIC_UUID16, &mut read_char_decl),
+            Attribute::new(Uuid::Uuid128(BLE_READ_UUID), &mut read_value),
+        ];
+        let mut rng = NoRng;
+        let ble = unsafe {
+            core::mem::transmute::<&mut Ble<'static>, &'static mut Ble<'static>>(&mut self.ble)
+        };
+        let attributes = unsafe {
+            core::mem::transmute::<&mut [Attribute<'_>], &'static mut [Attribute<'static>]>(
+                attributes.as_mut_slice(),
+            )
+        };
+        let rng = unsafe { core::mem::transmute::<&mut NoRng, &'static mut NoRng>(&mut rng) };
+        let result = {
+            let mut server = bleps::attribute_server::AttributeServer::new(ble, attributes, rng);
+            server.do_work()
+        };
+
+        match result {
+            Ok(WorkResult::DidWork) => {}
+            Ok(WorkResult::GotDisconnected) => {
+                self.connected = false;
+                info!("ble disconnected");
+                if let Err(error) = self.enable_advertising() {
+                    error!("ble advertising restart failed: {:?}", error);
+                } else {
+                    info!("ble advertising restarted");
+                }
+            }
+            Err(_) => warn!("ble gatt work failed"),
         }
     }
 
@@ -390,6 +526,10 @@ impl BleRadio {
 
     fn connected(&self) -> bool {
         self.connected
+    }
+
+    fn last_write(&self) -> &[u8] {
+        &self.received_data[..self.received_len]
     }
 }
 
@@ -405,11 +545,26 @@ enum BleInitError {
     AdvertisingData,
 }
 
+#[derive(Clone, Copy, Debug, defmt::Format)]
+pub enum BleActionError {
+    NotInitialized,
+    Connected,
+    Advertise,
+}
+
 fn millis() -> u64 {
     Instant::now().duration_since_epoch().as_millis()
 }
 
 fn block_on<F: Future>(future: F) -> F::Output {
+    block_on_with_yield(future, || {})
+}
+
+fn block_on_with_yield<F, Y>(future: F, mut on_wait: Y) -> F::Output
+where
+    F: Future,
+    Y: FnMut(),
+{
     let waker = noop_waker();
     let mut context = Context::from_waker(&waker);
     let mut future = core::pin::pin!(future);
@@ -418,8 +573,18 @@ fn block_on<F: Future>(future: F) -> F::Output {
         if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
             return output;
         }
+        on_wait();
         esp_rtos::CurrentThreadHandle::get().delay(Duration::from_millis(5));
     }
+}
+
+fn characteristic_declaration(properties: u8, value_handle: u16, uuid: [u8; 16]) -> [u8; 19] {
+    let mut declaration = [0; 19];
+    declaration[0] = properties;
+    declaration[1] = (value_handle & 0xff) as u8;
+    declaration[2] = (value_handle >> 8) as u8;
+    declaration[3..].copy_from_slice(&uuid);
+    declaration
 }
 
 fn noop_waker() -> Waker {

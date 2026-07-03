@@ -12,6 +12,7 @@ shift
 target_dir="${CARGO_TARGET_DIR:-target}"
 assets_bin="$target_dir/display-assets/assets.bin"
 assets_base="0x800000"
+probe="${PROBE_RS_PROBE:-303a:1001}"
 
 if [ ! -f "$assets_bin" ]; then
   echo "display assets package not found: $assets_bin" >&2
@@ -21,6 +22,8 @@ fi
 
 probe-rs download \
   --chip=esp32s3 \
+  --probe "$probe" \
+  --non-interactive \
   --preverify \
   --binary-format bin \
   --base-address "$assets_base" \
@@ -28,6 +31,8 @@ probe-rs download \
 
 probe-rs run \
   --chip=esp32s3 \
+  --probe "$probe" \
+  --non-interactive \
   --preverify \
   --always-print-stacktrace \
   --no-location \
